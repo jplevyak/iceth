@@ -1,0 +1,4 @@
+type Result = variant { Ok: blob; Err: text };
+service : {
+  ethRpcRequest : (jsonRpcPayload: text, serviceUrl: text, maxResultSize: nat64) -> (Result);
+}

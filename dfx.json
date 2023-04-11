@@ -1,0 +1,20 @@
+{
+  "canisters": {
+    "iceth": {
+      "candid": "iceth.did",
+      "type": "custom",
+      "wasm": "target/wasm32-unknown-unknown/release/iceth_opt.wasm",
+      "build": [
+        "cargo build --target wasm32-unknown-unknown --release",
+        "ic-cdk-optimizer target/wasm32-unknown-unknown/release/iceth.wasm -o target/wasm32-unknown-unknown/release/iceth_opt.wasm"
+      ]
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8000",
+      "type": "ephemeral"
+    }
+  },
+  "version": 1
+}
