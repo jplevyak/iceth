@@ -43,7 +43,7 @@ async fn eth_rpc_request(
     let cycles_available = ic_cdk::api::call::msg_cycles_available128();
     let cost = eth_rpc_cycles_cost(&json_rpc_payload, &service_url, max_response_bytes);
     if cycles_available < cost {
-        return Err(format!("requires {} cycles, got {} cycles", cycles_available, cost));
+        return Err(format!("requires {} cycles, got {} cycles", cost, cycles_available));
     }
     ic_cdk::api::call::msg_cycles_accept128(cost);
     let parsed_url = url::Url::parse(&service_url).or(Err("unable to parse serviceUrl"))?;
