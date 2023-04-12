@@ -40,14 +40,12 @@ async fn eth_rpc_request(
     service_url: String,
     max_response_bytes: u64,
 ) -> Result<Vec<u8>, String> {
-    let cycles_call = ic_cdk::api::call::msg_cycles_available128();
-    let cycles_estimated = eth_rpc_cycles_cost(&json_rpc_payload, &service_url, max_response_bytes);
-    if cycles_call < cycles_estimated {
-        return Err(format!(
-            "requires {} cycles, get {} cycles",
-            cycles_estimated, cycles_call
-        ));
+    let cycles_available = ic_cdk::api::call::msg_cycles_available128();
+    let cost = eth_rpc_cycles_cost(&json_rpc_payload, &service_url, max_response_bytes);
+    if cycles_available < cost {
+        return Err(format!("requires {} cycles, got {} cycles", cycles_available, cost));
     }
+    ic_cdk::api::call::msg_cycles_accept128(cost);
     let parsed_url = url::Url::parse(&service_url).or(Err("unable to parse serviceUrl"))?;
     let host = parsed_url
         .host_str()
