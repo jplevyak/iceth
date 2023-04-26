@@ -2,12 +2,8 @@
   "canisters": {
     "iceth": {
       "candid": "iceth.did",
-      "type": "custom",
-      "wasm": "target/wasm32-unknown-unknown/release/iceth_opt.wasm",
-      "build": [
-        "cargo build --target wasm32-unknown-unknown --release",
-        "ic-cdk-optimizer target/wasm32-unknown-unknown/release/iceth.wasm -o target/wasm32-unknown-unknown/release/iceth_opt.wasm"
-      ]
+      "type": "rust",
+      "package": "iceth"
     }
   },
   "networks": {
