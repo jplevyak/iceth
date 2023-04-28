@@ -11,7 +11,11 @@ use ic_nervous_system_common::{serve_logs, serve_logs_v2, serve_metrics};
 use std::cell::RefCell;
 use std::collections::hash_set::HashSet;
 
-const INGRESS_OVERHEAD: u128 = 100;
+const INGRESS_OVERHEAD_BYTES: u128 = 100;
+const INGRESS_MESSAGE_RECEIVED_COST: u128 = 1_200_000u128;
+const INGRESS_MESSAGE_BYTE_RECEIVED_COST: u128 = 2_000u128;
+const HTTP_OUTCALL_REQUEST_COST: u128 = 400_000_000u128;
+const HTTP_OUTCALL_BYTE_RECEIEVED_COST: u128 = 100_000u128;
 
 const ALLOWLIST_SERVICE_HOSTS_LIST: &'static [&'static str] = &[
     "cloudflare-eth.com",
@@ -152,16 +156,12 @@ async fn eth_rpc_request(
 }
 
 fn eth_rpc_cycles_cost(json_rpc_payload: &str, service_url: &str, max_response_bytes: u64) -> u128 {
-    let ingress_bytes = (json_rpc_payload.len() + service_url.len()) as u128 + INGRESS_OVERHEAD;
-    let cycles =
-        // 1.2M for an ingress message received
-        1_200_000u128
-        // 2K per ingress message byte received
-        + 2_000u128 as u128 * ingress_bytes
-        // 400M for the HTTPS outcall request
-        + 400_000_000u128
-        // 100K per byte of ingress message which is the size of http request size plus some overhead
-        + 100_000u128 as u128 * ingress_bytes + max_response_bytes as u128;
+    let ingress_bytes =
+        (json_rpc_payload.len() + service_url.len()) as u128 + INGRESS_OVERHEAD_BYTES;
+    let cycles = INGRESS_MESSAGE_RECEIVED_COST
+        + INGRESS_MESSAGE_BYTE_RECEIVED_COST * ingress_bytes
+        + HTTP_OUTCALL_REQUEST_COST
+        + HTTP_OUTCALL_BYTE_RECEIEVED_COST * (ingress_bytes + max_response_bytes as u128);
     cycles
 }
 
@@ -261,6 +261,8 @@ fn check_eth_rpc_cycles_cost() {
         "https://cloudflare-eth.com",
         1000,
     );
-    // Price for ingress (2000) and for http requeest size (100000) per byte.
-    assert_eq!(base_cost + 10 * (2_000 + 100_000), base_cost_s10)
+    assert_eq!(
+        base_cost + 10 * (INGRESS_MESSAGE_BYTE_RECEIVED_COST + HTTP_OUTCALL_BYTE_RECEIEVED_COST),
+        base_cost_s10
+    )
 }
