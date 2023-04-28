@@ -2,8 +2,6 @@ name: Rust
 
 on:
   pull_request:
-  schedule:
-    - cron: '0 0 * * *'
   push:
     branches:
       - main
@@ -15,7 +13,8 @@ jobs:
   cargo-fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
         with:
           # Set a PAT so that add-and-commit can trigger CI runs
           token: ${{ secrets.GIX_BOT_PAT }}
@@ -35,6 +34,7 @@ jobs:
   cargo-clippy:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
       - uses: actions/checkout@v3
 
       - run: rustup component add clippy
@@ -49,7 +49,8 @@ jobs:
   cargo-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
 
       - name: Cargo build
         uses: actions-rs/cargo@master
@@ -62,7 +63,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: cargo-check
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
 
       - name: Cargo build
         uses: actions-rs/cargo@master
@@ -75,7 +77,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: cargo-check
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
 
       - name: Cargo build
         uses: actions-rs/cargo@master
