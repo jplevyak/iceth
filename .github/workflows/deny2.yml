@@ -40,3 +40,15 @@ jobs:
         run: |
           cargo clippy -- -D clippy::all -D warnings -A clippy::manual_range_contains
           cargo clippy --tests --benches -- -D clippy::all -D warnings -A clippy::manual_range_contains
+
+  cargo-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+
+      - name: Cargo build
+        uses: actions-rs/cargo@master
+        with:
+          command: check
+          args: --all-targets
