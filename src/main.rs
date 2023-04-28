@@ -240,3 +240,12 @@ fn check_candid_interface() {
 
     service_compatible( CandidSource::Text(&new_interface), CandidSource::File(Path::new("iceth.did")),).unwrap();
 }
+
+#[test]
+fn check_eth_rpc_cycles_cost() {
+    let base_cost = eth_rpc_cycles_cost("{\"jsonrpc\":\"2.0\",\"method\":\"eth_gasPrice\",\"params\":[],\"id\":1}", "https://cloudflare-eth.com", 1000);
+    let s10 = "0123456789";
+    let base_cost_s10 = eth_rpc_cycles_cost(&("{\"jsonrpc\":\"2.0\",\"method\":\"eth_gasPrice\",\"params\":[],\"id\":1}".to_string() + s10), "https://cloudflare-eth.com", 1000);
+    // Price for ingress (2000) and for http requeest size (100000) per byte.
+    assert_eq!(base_cost + 10 * (2_000 + 100_000), base_cost_s10)
+}
