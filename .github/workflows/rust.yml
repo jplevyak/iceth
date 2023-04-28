@@ -14,10 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          # Set a PAT so that add-and-commit can trigger CI runs
-          token: ${{ secrets.GIX_BOT_PAT }}
+        uses: actions/checkout@master
       - name: Cargo fmt
         run: |
           rustup component add rustfmt
@@ -34,8 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
-
+        uses: actions/checkout@master
       - run: rustup component add clippy
       - name: Cargo clippy
         # We run clippy twice (once without tests), so that it accurately reports dead code in the non-test configuration.
@@ -49,10 +45,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@master
 
       - name: Cargo build
-        uses: actions-rs/cargo@master
         uses: actions-rs/cargo@master
         with:
           command: check
@@ -63,10 +58,9 @@ jobs:
     needs: cargo-check
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@master
 
       - name: Cargo build
-        uses: actions-rs/cargo@master
         uses: actions-rs/cargo@master
         with:
           command: build
@@ -77,10 +71,9 @@ jobs:
     needs: cargo-check
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@master
 
       - name: Cargo build
-        uses: actions-rs/cargo@master
         uses: actions-rs/cargo@master
         with:
           command: build

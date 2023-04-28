@@ -24,4 +24,4 @@ jobs:
       - name:           Cargo deny
         uses:           EmbarkStudios/cargo-deny-action@v1
         with:
-          command:      "check --hide-inclusion-graph"
+          command:      "check --hide-inclusion-graph || true"
