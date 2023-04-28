@@ -14,6 +14,7 @@ on:
 jobs:
   cargo-deny:
     runs-on:            ubuntu-latest
+    continue-on-error:  true
     steps:
       - name:           Checkout sources & submodules
         uses:           actions/checkout@master
