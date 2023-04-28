@@ -59,7 +59,7 @@ jobs:
       - run: cargo install --locked cargo-audit
       - name: Cargo audit
         run: |
-          cargo-deny audit || true
+          cargo audit || true
 
   cargo-check:
     runs-on: ubuntu-latest
