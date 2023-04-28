@@ -15,10 +15,7 @@ jobs:
     continue-on-error:  true
     steps:
       - name:           Checkout sources & submodules
-        uses:           actions/checkout@master
-        with:
-          fetch-depth:  5
-          submodules:   recursive
+        uses: actions/checkout@master
       - name: Cargo fmt
         run: |
           rustup component add rustfmt
