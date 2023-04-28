@@ -1,17 +1,15 @@
 use candid::{candid_method, CandidType};
-use ic_cdk::api::management_canister::http_request::{
-    http_request as make_http_request, CanisterHttpRequestArgument, HttpHeader, HttpMethod, HttpResponse, TransformArgs,
-    TransformContext,
-};
+use ic_canister_log::declare_log_buffer;
 use ic_canisters_http_types::{
     HttpRequest as IcHttpRequest, HttpResponse as IcHttpResponse, HttpResponseBuilder,
 };
-use ic_nervous_system_common::{
-    serve_logs, serve_logs_v2, serve_metrics
+use ic_cdk::api::management_canister::http_request::{
+    http_request as make_http_request, CanisterHttpRequestArgument, HttpHeader, HttpMethod,
+    HttpResponse, TransformArgs, TransformContext,
 };
-use ic_canister_log::declare_log_buffer;
-use std::collections::hash_set::HashSet;
+use ic_nervous_system_common::{serve_logs, serve_logs_v2, serve_metrics};
 use std::cell::RefCell;
+use std::collections::hash_set::HashSet;
 
 const INGRESS_OVERHEAD: u128 = 100;
 
@@ -65,10 +63,7 @@ enum EthRpcError {
     ServiceUrlParseError,
     ServiceUrlHostMissing,
     ServiceUrlHostNotAllowed,
-    HttpRequestError {
-        code: u32,
-        message: String,
-    },
+    HttpRequestError { code: u32, message: String },
 }
 
 #[macro_export]
@@ -83,23 +78,23 @@ macro_rules! c_log {
 
 #[macro_export]
 macro_rules! inc_metric {
-	($metric:ident) => {{
+    ($metric:ident) => {{
         METRICS.with(|m| m.borrow_mut().$metric += 1);
-	}}
+    }};
 }
 
 #[macro_export]
 macro_rules! add_metric {
-	($metric:ident, $value:expr) => {{
+    ($metric:ident, $value:expr) => {{
         METRICS.with(|m| m.borrow_mut().$metric += 1);
-	}}
+    }};
 }
 
 #[macro_export]
 macro_rules! get_metric {
-	($metric:ident) => {{
+    ($metric:ident) => {{
         METRICS.with(|m| m.borrow().$metric)
-	}}
+    }};
 }
 
 #[ic_cdk_macros::update(name = "ethRpcRequest")]
@@ -113,7 +108,10 @@ async fn eth_rpc_request(
     let cycles_available = ic_cdk::api::call::msg_cycles_available128();
     let cost = eth_rpc_cycles_cost(&json_rpc_payload, &service_url, max_response_bytes);
     if cycles_available < cost {
-        return Err(EthRpcError::TooFewCycles(format!("requires {} cycles, got {} cycles", cost, cycles_available)));
+        return Err(EthRpcError::TooFewCycles(format!(
+            "requires {} cycles, got {} cycles",
+            cost, cycles_available
+        )));
     }
     ic_cdk::api::call::msg_cycles_accept128(cost);
     add_metric!(eth_rpc_request_cycles_charged, cost);
@@ -146,13 +144,16 @@ async fn eth_rpc_request(
     };
     match make_http_request(request).await {
         Ok((result,)) => Ok(result.body),
-        Err((r, m)) => Err(EthRpcError::HttpRequestError { code: r as u32, message: m }),
+        Err((r, m)) => Err(EthRpcError::HttpRequestError {
+            code: r as u32,
+            message: m,
+        }),
     }
 }
 
 fn eth_rpc_cycles_cost(json_rpc_payload: &str, service_url: &str, max_response_bytes: u64) -> u128 {
     let ingress_bytes = (json_rpc_payload.len() + service_url.len()) as u128 + INGRESS_OVERHEAD;
-    let cycles = 
+    let cycles =
         // 1.2M for an ingress message received
         1_200_000u128
         // 2K per ingress message byte received
@@ -177,7 +178,8 @@ fn transform(args: TransformArgs) -> HttpResponse {
 
 #[ic_cdk_macros::init]
 fn init() {
-    ALLOWLIST_SERVICE_HOSTS.with(|a| (*a.borrow_mut()) = AllowlistSet::from_iter(ALLOWLIST_SERVICE_HOSTS_LIST));
+    ALLOWLIST_SERVICE_HOSTS
+        .with(|a| (*a.borrow_mut()) = AllowlistSet::from_iter(ALLOWLIST_SERVICE_HOSTS_LIST));
 }
 
 #[ic_cdk::query]
@@ -193,32 +195,32 @@ fn http_request(request: IcHttpRequest) -> IcHttpResponse {
 
 /// Encode the metrics in a format that can be understood by Prometheus.
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
-	w.encode_gauge(
-		"canister_version",
+    w.encode_gauge(
+        "canister_version",
         ic_cdk::api::canister_version() as f64,
-		"Canister version.",
-		)?;
-	w.encode_gauge(
-		"stable_memory_pages",
+        "Canister version.",
+    )?;
+    w.encode_gauge(
+        "stable_memory_pages",
         ic_cdk::api::stable::stable64_size() as f64,
-		"Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
-		)?;
-	w.encode_counter(
-		"eth_rpc_requests",
+        "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
+    )?;
+    w.encode_counter(
+        "eth_rpc_requests",
         get_metric!(eth_rpc_requests) as f64,
-		"Number of eth_rpc_request() calls.",
-		)?;
-	w.encode_counter(
-		"eth_rpc_request_cycles_charged",
+        "Number of eth_rpc_request() calls.",
+    )?;
+    w.encode_counter(
+        "eth_rpc_request_cycles_charged",
         get_metric!(eth_rpc_request_cycles_charged) as f64,
-		"Cycles charged by eth_rpc_request() calls.",
-		)?;
-	w.encode_counter(
-		"eth_rpc_request_cycles_refunded",
+        "Cycles charged by eth_rpc_request() calls.",
+    )?;
+    w.encode_counter(
+        "eth_rpc_request_cycles_refunded",
         get_metric!(eth_rpc_request_cycles_refunded) as f64,
-		"Cycles refunded by eth_rpc_request() calls.",
-		)?;
-	Ok(())
+        "Cycles refunded by eth_rpc_request() calls.",
+    )?;
+    Ok(())
 }
 
 #[cfg(not(any(target_arch = "wasm32", test)))]
@@ -238,14 +240,27 @@ fn check_candid_interface() {
     candid::export_service!();
     let new_interface = __export_service();
 
-    service_compatible( CandidSource::Text(&new_interface), CandidSource::File(Path::new("iceth.did")),).unwrap();
+    service_compatible(
+        CandidSource::Text(&new_interface),
+        CandidSource::File(Path::new("iceth.did")),
+    )
+    .unwrap();
 }
 
 #[test]
 fn check_eth_rpc_cycles_cost() {
-    let base_cost = eth_rpc_cycles_cost("{\"jsonrpc\":\"2.0\",\"method\":\"eth_gasPrice\",\"params\":[],\"id\":1}", "https://cloudflare-eth.com", 1000);
+    let base_cost = eth_rpc_cycles_cost(
+        "{\"jsonrpc\":\"2.0\",\"method\":\"eth_gasPrice\",\"params\":[],\"id\":1}",
+        "https://cloudflare-eth.com",
+        1000,
+    );
     let s10 = "0123456789";
-    let base_cost_s10 = eth_rpc_cycles_cost(&("{\"jsonrpc\":\"2.0\",\"method\":\"eth_gasPrice\",\"params\":[],\"id\":1}".to_string() + s10), "https://cloudflare-eth.com", 1000);
+    let base_cost_s10 = eth_rpc_cycles_cost(
+        &("{\"jsonrpc\":\"2.0\",\"method\":\"eth_gasPrice\",\"params\":[],\"id\":1}".to_string()
+            + s10),
+        "https://cloudflare-eth.com",
+        1000,
+    );
     // Price for ingress (2000) and for http requeest size (100000) per byte.
     assert_eq!(base_cost + 10 * (2_000 + 100_000), base_cost_s10)
 }

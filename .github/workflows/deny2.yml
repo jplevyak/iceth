@@ -14,7 +14,7 @@ jobs:
     runs-on:            ubuntu-latest
     continue-on-error:  true
     steps:
-      - name:           Checkout sources & submodules
+      - name: Checkout
         uses: actions/checkout@master
       - name: Cargo fmt
         run: |
