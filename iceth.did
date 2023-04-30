@@ -4,8 +4,8 @@ type EthRpcResult = variant {
     NoPermission;
     TooFewCycles : text;
     ServiceUrlParseError;
-    ServiceUrlHostMissing : text;
-    ServiceUrlHostNotAllowed : text;
+    ServiceUrlHostMissing;
+    ServiceUrlHostNotAllowed;
     HttpRequestError : record { code: nat32; message: text };
   }
 };

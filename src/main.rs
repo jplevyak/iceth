@@ -148,7 +148,7 @@ async fn eth_rpc_request(
 ) -> Result<Vec<u8>, EthRpcError> {
     inc_metric!(eth_rpc_requests);
     let caller = ic_cdk::caller().to_string();
-    if !ALLOWLIST_RPC.with(|a| !a.borrow().is_empty() && a.borrow().contains(&caller.as_str())) {
+    if ALLOWLIST_RPC.with(|a| !a.borrow().is_empty() && !a.borrow().contains(&caller.as_str())) {
         inc_metric!(eth_rpc_request_err_no_permission);
         return Err(EthRpcError::NoPermission);
     }
@@ -168,7 +168,8 @@ async fn eth_rpc_request(
         .host_str()
         .ok_or(EthRpcError::ServiceUrlHostMissing)?
         .to_string();
-    if !ALLOWLIST_SERVICE_HOSTS.with(|a| a.borrow().contains(&host.as_str())) {
+    if ALLOWLIST_SERVICE_HOSTS.with(|a| !a.borrow().contains(&host.as_str())) {
+        c_log!(INFO, "host not allowed {}", host);
         inc_metric!(eth_rpc_request_err_service_url_host_not_allowed);
         return Err(EthRpcError::ServiceUrlHostNotAllowed);
     }
@@ -224,6 +225,15 @@ fn transform(args: TransformArgs) -> HttpResponse {
 
 #[ic_cdk_macros::init]
 fn init() {
+    initialize();
+}
+
+#[ic_cdk_macros::post_upgrade]
+fn post_upgrade() {
+    initialize();
+}
+
+fn initialize() {
     ALLOWLIST_SERVICE_HOSTS
         .with(|a| (*a.borrow_mut()) = AllowlistSet::from_iter(ALLOWLIST_SERVICE_HOSTS_LIST));
     ALLOWLIST_RPC.with(|a| (*a.borrow_mut()) = AllowlistSet::from_iter(ALLOWLIST_RPC_LIST));
