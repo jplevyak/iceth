@@ -1,6 +1,7 @@
 type EthRpcResult = variant {
   Ok: blob;
   Err : opt variant {
+    NoPermission;
     TooFewCycles : text;
     ServiceUrlParseError;
     ServiceUrlHostMissing : text;
@@ -9,5 +10,5 @@ type EthRpcResult = variant {
   }
 };
 service : {
-  ethRpcRequest : (jsonRpcPayload: text, serviceUrl: text, maxResultSize: nat64) -> (EthRpcResult);
+  eth_rpc_request: (json_rpc_payload: text, service_url: text, max_response_bytes: nat64) -> (EthRpcResult);
 }
