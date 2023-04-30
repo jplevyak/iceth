@@ -48,9 +48,6 @@ const ALLOWLIST_SERVICE_HOSTS_LIST: &[&str] = &[
     "eth-mainnet.gateway.pokt.network",
 ];
 
-const ALLOWLIST_REGISTER_API_KEY_LIST: &[&str] =
-    &["jgfvj-q2dnm-hohxf-x5nvm-n3olk-fxbdu-4gfri-4vhci-aztp4-s3k3i-sqe"];
-
 const ALLOWLIST_RPC_LIST: &[&str] = &[];
 
 type AllowlistSet = HashSet<&'static &'static str>;
@@ -229,8 +226,6 @@ fn transform(args: TransformArgs) -> HttpResponse {
 fn init() {
     ALLOWLIST_SERVICE_HOSTS
         .with(|a| (*a.borrow_mut()) = AllowlistSet::from_iter(ALLOWLIST_SERVICE_HOSTS_LIST));
-    ALLOWLIST_REGISTER_API_KEY
-        .with(|a| (*a.borrow_mut()) = AllowlistSet::from_iter(ALLOWLIST_REGISTER_API_KEY_LIST));
     ALLOWLIST_RPC.with(|a| (*a.borrow_mut()) = AllowlistSet::from_iter(ALLOWLIST_RPC_LIST));
 }
 
