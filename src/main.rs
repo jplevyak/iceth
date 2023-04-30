@@ -8,6 +8,8 @@ use ic_cdk::api::management_canister::http_request::{
     HttpResponse, TransformArgs, TransformContext,
 };
 use ic_nervous_system_common::{serve_logs, serve_logs_v2, serve_metrics};
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::{BoundedStorable, DefaultMemoryImpl, StableBTreeMap, Storable};
 use std::cell::RefCell;
 use std::collections::hash_set::HashSet;
 
@@ -16,6 +18,8 @@ const INGRESS_MESSAGE_RECEIVED_COST: u128 = 1_200_000u128;
 const INGRESS_MESSAGE_BYTE_RECEIVED_COST: u128 = 2_000u128;
 const HTTP_OUTCALL_REQUEST_COST: u128 = 400_000_000u128;
 const HTTP_OUTCALL_BYTE_RECEIEVED_COST: u128 = 100_000u128;
+
+const STRING_STORABLE_MAX_SIZE: u32 = 100;
 
 const ALLOWLIST_SERVICE_HOSTS_LIST: &'static [&'static str] = &[
     "cloudflare-eth.com",
@@ -44,6 +48,11 @@ const ALLOWLIST_SERVICE_HOSTS_LIST: &'static [&'static str] = &[
     "eth-mainnet.gateway.pokt.network",
 ];
 
+const ALLOWLIST_REGISTER_API_KEY_LIST: &'static [&'static str] =
+    &["jgfvj-q2dnm-hohxf-x5nvm-n3olk-fxbdu-4gfri-4vhci-aztp4-s3k3i-sqe"];
+
+const ALLOWLIST_RPC_LIST: &'static [&'static str] = &[];
+
 type AllowlistSet = HashSet<&'static &'static str>;
 
 declare_log_buffer!(name = INFO, capacity = 1000);
@@ -54,15 +63,47 @@ struct Metrics {
     eth_rpc_requests: u64,
     eth_rpc_request_cycles_charged: u64,
     eth_rpc_request_cycles_refunded: u64,
+    eth_rpc_request_err_no_permission: u64,
+    eth_rpc_request_err_service_url_host_not_allowed: u64,
+    eth_rpc_request_err_http_request_error: u64,
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
+struct StringStorable(String);
+
+impl Storable for StringStorable {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        // String already implements `Storable`.
+        self.0.to_bytes()
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        Self(String::from_bytes(bytes))
+    }
+}
+
+impl BoundedStorable for StringStorable {
+    const MAX_SIZE: u32 = STRING_STORABLE_MAX_SIZE;
+    const IS_FIXED_SIZE: bool = false;
 }
 
 thread_local! {
+    static METRICS: RefCell<Metrics> = RefCell::new(Metrics::default());
     static ALLOWLIST_SERVICE_HOSTS: RefCell<AllowlistSet> = RefCell::new(AllowlistSet::new());
-        static METRICS: RefCell<Metrics> = RefCell::new(Metrics::default());
+    static ALLOWLIST_REGISTER_API_KEY: RefCell<AllowlistSet> = RefCell::new(AllowlistSet::new());
+    static ALLOWLIST_RPC: RefCell<AllowlistSet> = RefCell::new(AllowlistSet::new());
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
+        RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
+    static PROVIDERS: RefCell<StableBTreeMap<StringStorable, StringStorable, VirtualMemory<DefaultMemoryImpl>>> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))),
+            )
+        );
 }
 
 #[derive(CandidType)]
 enum EthRpcError {
+    NoPermission,
     TooFewCycles(String),
     ServiceUrlParseError,
     ServiceUrlHostMissing,
@@ -101,14 +142,19 @@ macro_rules! get_metric {
     }};
 }
 
-#[ic_cdk_macros::update(name = "ethRpcRequest")]
-#[candid_method(update, rename = "ethRpcRequest")]
+#[ic_cdk_macros::update]
+#[candid_method]
 async fn eth_rpc_request(
     json_rpc_payload: String,
     service_url: String,
     max_response_bytes: u64,
 ) -> Result<Vec<u8>, EthRpcError> {
     inc_metric!(eth_rpc_requests);
+    let caller = ic_cdk::caller().to_string();
+    if !ALLOWLIST_RPC.with(|a| !a.borrow().is_empty() && a.borrow().contains(&caller.as_str())) {
+        inc_metric!(eth_rpc_request_err_no_permission);
+        return Err(EthRpcError::NoPermission);
+    }
     let cycles_available = ic_cdk::api::call::msg_cycles_available128();
     let cost = eth_rpc_cycles_cost(&json_rpc_payload, &service_url, max_response_bytes);
     if cycles_available < cost {
@@ -126,6 +172,7 @@ async fn eth_rpc_request(
         .ok_or(EthRpcError::ServiceUrlHostMissing)?
         .to_string();
     if !ALLOWLIST_SERVICE_HOSTS.with(|a| a.borrow().contains(&host.as_str())) {
+        inc_metric!(eth_rpc_request_err_service_url_host_not_allowed);
         return Err(EthRpcError::ServiceUrlHostNotAllowed);
     }
     let request_headers = vec![
@@ -148,10 +195,13 @@ async fn eth_rpc_request(
     };
     match make_http_request(request).await {
         Ok((result,)) => Ok(result.body),
-        Err((r, m)) => Err(EthRpcError::HttpRequestError {
-            code: r as u32,
-            message: m,
-        }),
+        Err((r, m)) => {
+            inc_metric!(eth_rpc_request_err_http_request_error);
+            Err(EthRpcError::HttpRequestError {
+                code: r as u32,
+                message: m,
+            })
+        }
     }
 }
 
@@ -180,6 +230,9 @@ fn transform(args: TransformArgs) -> HttpResponse {
 fn init() {
     ALLOWLIST_SERVICE_HOSTS
         .with(|a| (*a.borrow_mut()) = AllowlistSet::from_iter(ALLOWLIST_SERVICE_HOSTS_LIST));
+    ALLOWLIST_REGISTER_API_KEY
+        .with(|a| (*a.borrow_mut()) = AllowlistSet::from_iter(ALLOWLIST_REGISTER_API_KEY_LIST));
+    ALLOWLIST_RPC.with(|a| (*a.borrow_mut()) = AllowlistSet::from_iter(ALLOWLIST_RPC_LIST));
 }
 
 #[ic_cdk::query]
