@@ -21,7 +21,7 @@ const HTTP_OUTCALL_BYTE_RECEIEVED_COST: u128 = 100_000u128;
 
 const STRING_STORABLE_MAX_SIZE: u32 = 100;
 
-const ALLOWLIST_SERVICE_HOSTS_LIST: &'static [&'static str] = &[
+const ALLOWLIST_SERVICE_HOSTS_LIST: &[&str] = &[
     "cloudflare-eth.com",
     "ethereum.publicnode.com",
     "eth-mainnet.g.alchemy.com",
@@ -48,10 +48,10 @@ const ALLOWLIST_SERVICE_HOSTS_LIST: &'static [&'static str] = &[
     "eth-mainnet.gateway.pokt.network",
 ];
 
-const ALLOWLIST_REGISTER_API_KEY_LIST: &'static [&'static str] =
+const ALLOWLIST_REGISTER_API_KEY_LIST: &[&str] =
     &["jgfvj-q2dnm-hohxf-x5nvm-n3olk-fxbdu-4gfri-4vhci-aztp4-s3k3i-sqe"];
 
-const ALLOWLIST_RPC_LIST: &'static [&'static str] = &[];
+const ALLOWLIST_RPC_LIST: &[&str] = &[];
 
 type AllowlistSet = HashSet<&'static &'static str>;
 
@@ -208,11 +208,10 @@ async fn eth_rpc_request(
 fn eth_rpc_cycles_cost(json_rpc_payload: &str, service_url: &str, max_response_bytes: u64) -> u128 {
     let ingress_bytes =
         (json_rpc_payload.len() + service_url.len()) as u128 + INGRESS_OVERHEAD_BYTES;
-    let cycles = INGRESS_MESSAGE_RECEIVED_COST
+    INGRESS_MESSAGE_RECEIVED_COST
         + INGRESS_MESSAGE_BYTE_RECEIVED_COST * ingress_bytes
         + HTTP_OUTCALL_REQUEST_COST
-        + HTTP_OUTCALL_BYTE_RECEIEVED_COST * (ingress_bytes + max_response_bytes as u128);
-    cycles
+        + HTTP_OUTCALL_BYTE_RECEIEVED_COST * (ingress_bytes + max_response_bytes as u128)
 }
 
 #[ic_cdk_macros::query(name = "transform")]
