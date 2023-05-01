@@ -8,8 +8,6 @@ use ic_cdk::api::management_canister::http_request::{
     HttpResponse, TransformArgs, TransformContext,
 };
 use ic_nervous_system_common::{serve_logs, serve_logs_v2, serve_metrics};
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{BoundedStorable, DefaultMemoryImpl, StableBTreeMap, Storable};
 use std::cell::RefCell;
 use std::collections::hash_set::HashSet;
 
@@ -18,8 +16,6 @@ const INGRESS_MESSAGE_RECEIVED_COST: u128 = 1_200_000u128;
 const INGRESS_MESSAGE_BYTE_RECEIVED_COST: u128 = 2_000u128;
 const HTTP_OUTCALL_REQUEST_COST: u128 = 400_000_000u128;
 const HTTP_OUTCALL_BYTE_RECEIEVED_COST: u128 = 100_000u128;
-
-const STRING_STORABLE_MAX_SIZE: u32 = 100;
 
 const ALLOWLIST_SERVICE_HOSTS_LIST: &[&str] = &[
     "cloudflare-eth.com",
@@ -65,37 +61,11 @@ struct Metrics {
     eth_rpc_request_err_http_request_error: u64,
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
-struct StringStorable(String);
-
-impl Storable for StringStorable {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        // String already implements `Storable`.
-        self.0.to_bytes()
-    }
-
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        Self(String::from_bytes(bytes))
-    }
-}
-
-impl BoundedStorable for StringStorable {
-    const MAX_SIZE: u32 = STRING_STORABLE_MAX_SIZE;
-    const IS_FIXED_SIZE: bool = false;
-}
-
 thread_local! {
     static METRICS: RefCell<Metrics> = RefCell::new(Metrics::default());
     static ALLOWLIST_SERVICE_HOSTS: RefCell<AllowlistSet> = RefCell::new(AllowlistSet::new());
     static ALLOWLIST_REGISTER_API_KEY: RefCell<AllowlistSet> = RefCell::new(AllowlistSet::new());
     static ALLOWLIST_RPC: RefCell<AllowlistSet> = RefCell::new(AllowlistSet::new());
-    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
-        RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
-    static PROVIDERS: RefCell<StableBTreeMap<StringStorable, StringStorable, VirtualMemory<DefaultMemoryImpl>>> = RefCell::new(
-        StableBTreeMap::init(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))),
-            )
-        );
 }
 
 #[derive(CandidType)]
