@@ -84,7 +84,7 @@ struct Metrics {
 #[derive(Clone, Debug, CandidType, FromPrimitive, Deserialize)]
 enum Auth {
     Admin = 1,
-    RPC = 2,
+    Rpc = 2,
     RegisterProvider = 4,
 }
 
@@ -263,7 +263,7 @@ async fn json_rpc_request_internal(
     inc_metric!(json_rpc_requests);
     let caller = ic_cdk::caller().to_string();
     if ALLOWLIST_RPC.with(|a| !a.borrow().is_empty() && !a.borrow().contains(&caller.as_str()))
-        || authorized(Auth::RPC)
+        || authorized(Auth::Rpc)
     {
         inc_metric!(json_rpc_request_err_no_permission);
         return Err(EthRpcError::NoPermission);
@@ -362,7 +362,7 @@ fn get_providers() -> Vec<RegisteredProvider> {
 
 #[ic_cdk::update(guard = "is_authorized_register_provider")]
 #[candid_method]
-fn register_provider(provider: RegisterProvider) -> () {
+fn register_provider(provider: RegisterProvider) {
     let provider_id = METADATA.with(|m| {
         let mut metadata = m.borrow().get().clone();
         metadata.next_provider_id += 1;
@@ -387,7 +387,7 @@ fn register_provider(provider: RegisterProvider) -> () {
 
 #[ic_cdk::update(guard = "is_authorized_register_provider")]
 #[candid_method]
-fn unregister_provider(provider_id: u64) -> () {
+fn unregister_provider(provider_id: u64) {
     PROVIDERS.with(|p| {
         p.borrow_mut().remove(&provider_id);
     });
@@ -483,9 +483,7 @@ fn authorize(principal: Principal, auth: Auth) {
         let mut auth_map = a.borrow_mut();
         let principal = principal.as_slice().to_vec().try_into().unwrap();
         if let Some(v) = auth_map.get(&principal) {
-            auth_map
-                .insert(principal, (v as u32) | (auth as u32))
-                .unwrap();
+            auth_map.insert(principal, v | (auth as u32)).unwrap();
         } else {
             auth_map.insert(principal, auth as u32).unwrap();
         }
