@@ -8,13 +8,19 @@ use ic_cdk::api::management_canister::http_request::{
     HttpResponse, TransformArgs, TransformContext,
 };
 use ic_nervous_system_common::{serve_logs, serve_logs_v2, serve_metrics};
+#[cfg(not(target_arch = "wasm32"))]
+use ic_stable_structures::file_mem::FileMemory;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{BoundedStorable, Cell, DefaultMemoryImpl, StableBTreeMap, Storable};
+#[cfg(target_arch = "wasm32")]
+use ic_stable_structures::DefaultMemoryImpl;
+use ic_stable_structures::{BoundedStorable, Cell, StableBTreeMap, Storable};
 #[macro_use]
 extern crate num_derive;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::hash_set::HashSet;
+#[cfg(not(target_arch = "wasm32"))]
+use std::fs::File;
 
 const INGRESS_OVERHEAD_BYTES: u128 = 100;
 const INGRESS_MESSAGE_RECEIVED_COST: u128 = 1_200_000u128;
@@ -23,6 +29,7 @@ const HTTP_OUTCALL_REQUEST_COST: u128 = 400_000_000u128;
 const HTTP_OUTCALL_BYTE_RECEIEVED_COST: u128 = 100_000u128;
 
 const STRING_STORABLE_MAX_SIZE: u32 = 100;
+const WASM_PAGE_SIZE: u64 = 65536;
 
 const ALLOWLIST_SERVICE_HOSTS_LIST: &[&str] = &[
     "cloudflare-eth.com",
@@ -54,7 +61,11 @@ const ALLOWLIST_SERVICE_HOSTS_LIST: &[&str] = &[
 const ALLOWLIST_RPC_LIST: &[&str] = &[];
 
 type AllowlistSet = HashSet<&'static &'static str>;
+
 #[allow(unused)] // Some compiler quirk causes this to be reported as unused.
+#[cfg(not(target_arch = "wasm32"))]
+type Memory = VirtualMemory<FileMemory>;
+#[cfg(target_arch = "wasm32")]
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 declare_log_buffer!(name = INFO, capacity = 1000);
@@ -161,6 +172,10 @@ thread_local! {
     static ALLOWLIST_RPC: RefCell<AllowlistSet> = RefCell::new(AllowlistSet::new());
     static AUTH_STABLE: RefCell<HashSet<Principal>> = RefCell::new(HashSet::<Principal>::new());
 
+    #[cfg(not(target_arch = "wasm32"))]
+    static MEMORY_MANAGER: RefCell<MemoryManager<FileMemory>> =
+        RefCell::new(MemoryManager::init(FileMemory::new(File::open("stable_memory.bin").unwrap())));
+    #[cfg(target_arch = "wasm32")]
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
     static METADATA: RefCell<Cell<Metadata, Memory>> = RefCell::new(Cell::init(
@@ -432,9 +447,33 @@ fn is_stable_authorized() -> Result<(), String> {
 }
 
 #[ic_cdk_macros::update(guard = "is_stable_authorized")]
-#[candid_method]
 fn stable_authorize(principal: Principal) {
     AUTH_STABLE.with(|a| a.borrow_mut().insert(principal));
+}
+
+#[ic_cdk_macros::query(guard = "is_stable_authorized")]
+fn stable_size() -> u64 {
+    ic_cdk::api::stable::stable64_size() * WASM_PAGE_SIZE
+}
+
+#[ic_cdk_macros::query(guard = "is_stable_authorized")]
+fn stable_read(offset: u64, length: u64) -> Vec<u8> {
+    let mut buffer = Vec::new();
+    buffer.resize(length as usize, 0);
+    ic_cdk::api::stable::stable64_read(offset, buffer.as_mut_slice());
+    buffer
+}
+
+#[ic_cdk_macros::update(guard = "is_stable_authorized")]
+fn stable_write(offset: u64, buffer: Vec<u8>) {
+    let size = offset + buffer.len() as u64;
+    let old_size = ic_cdk::api::stable::stable64_size() * WASM_PAGE_SIZE;
+    if size > old_size {
+        let old_pages = old_size / WASM_PAGE_SIZE;
+        let pages = (size + (WASM_PAGE_SIZE - 1)) / WASM_PAGE_SIZE;
+        ic_cdk::api::stable::stable64_grow(pages - old_pages).unwrap();
+    }
+    ic_cdk::api::stable::stable64_write(offset, buffer.as_slice());
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
