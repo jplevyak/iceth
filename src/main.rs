@@ -1,5 +1,5 @@
 use candid::{candid_method, CandidType};
-use ic_canister_log::declare_log_buffer;
+use ic_canister_log::{declare_log_buffer, log};
 use ic_canisters_http_types::{
     HttpRequest as IcHttpRequest, HttpResponse as IcHttpResponse, HttpResponseBuilder,
 };
@@ -79,16 +79,6 @@ enum EthRpcError {
 }
 
 #[macro_export]
-macro_rules! c_log {
-	($sink:expr, $message:expr $(,$args:expr)* $(,)*) => {{
-		let message = std::format!($message $(,$args)*);
-		// Print the message for convenience for local development (e.g. integration tests)
-		ic_cdk::println!("{}", &message);
-		ic_canister_log::log!($sink, $message $(,$args)*);
-	}}
-}
-
-#[macro_export]
 macro_rules! inc_metric {
     ($metric:ident) => {{
         METRICS.with(|m| m.borrow_mut().$metric += 1);
@@ -139,7 +129,7 @@ async fn eth_rpc_request(
         .ok_or(EthRpcError::ServiceUrlHostMissing)?
         .to_string();
     if ALLOWLIST_SERVICE_HOSTS.with(|a| !a.borrow().contains(&host.as_str())) {
-        c_log!(INFO, "host not allowed {}", host);
+        log!(INFO, "host not allowed {}", host);
         inc_metric!(eth_rpc_request_err_service_url_host_not_allowed);
         return Err(EthRpcError::ServiceUrlHostNotAllowed);
     }
