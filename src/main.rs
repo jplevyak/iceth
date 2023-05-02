@@ -96,6 +96,9 @@ struct Metadata {
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
 struct StringStorable(String);
 
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
+struct PrincipalStorable(Principal);
+
 impl Storable for StringStorable {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
         // String already implements `Storable`.
@@ -109,6 +112,21 @@ impl Storable for StringStorable {
 
 impl BoundedStorable for StringStorable {
     const MAX_SIZE: u32 = STRING_STORABLE_MAX_SIZE;
+    const IS_FIXED_SIZE: bool = false;
+}
+
+impl Storable for PrincipalStorable {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        std::borrow::Cow::from(self.0.as_slice())
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        Self(Principal::from_slice(&bytes))
+    }
+}
+
+impl BoundedStorable for PrincipalStorable {
+    const MAX_SIZE: u32 = 29;
     const IS_FIXED_SIZE: bool = false;
 }
 
@@ -181,7 +199,7 @@ thread_local! {
     static METADATA: RefCell<Cell<Metadata, Memory>> = RefCell::new(Cell::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))),
             <Metadata>::default()).unwrap());
-    static AUTH: RefCell<StableBTreeMap<[u8;29], u32, Memory>> = RefCell::new(
+    static AUTH: RefCell<StableBTreeMap<PrincipalStorable, u32, Memory>> = RefCell::new(
         StableBTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1)))));
     static PROVIDERS: RefCell<StableBTreeMap<u64, Provider, Memory>> = RefCell::new(
         StableBTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))));
@@ -481,11 +499,11 @@ fn stable_write(offset: u64, buffer: Vec<u8>) {
 fn authorize(principal: Principal, auth: Auth) {
     AUTH.with(|a| {
         let mut auth_map = a.borrow_mut();
-        let principal = principal.as_slice().to_vec().try_into().unwrap();
+        let principal = PrincipalStorable(principal);
         if let Some(v) = auth_map.get(&principal) {
-            auth_map.insert(principal, v | (auth as u32)).unwrap();
+            auth_map.insert(principal, v | (auth as u32));
         } else {
-            auth_map.insert(principal, auth as u32).unwrap();
+            auth_map.insert(principal, auth as u32);
         }
     });
 }
@@ -511,11 +529,9 @@ fn is_authorized_register_provider() -> Result<(), String> {
 }
 
 fn authorized(auth: Auth) -> bool {
+    let caller = PrincipalStorable(ic_cdk::caller());
     AUTH.with(|a| {
-        if let Some(v) = a
-            .borrow()
-            .get(&ic_cdk::caller().as_slice().to_vec().try_into().unwrap())
-        {
+        if let Some(v) = a.borrow().get(&caller) {
             (v & (auth as u32)) != 0
         } else {
             false
