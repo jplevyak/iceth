@@ -408,7 +408,7 @@ fn register_provider(provider: RegisterProvider) {
 fn unregister_provider(provider_id: u64) {
     PROVIDERS.with(|p| {
         if let Some(provider) = p.borrow().get(&provider_id) {
-            if provider.owner == ic_cdk::caller() || authorized(Auth::Admn) {
+            if provider.owner == ic_cdk::caller() || authorized(Auth::Admin) {
                 p.borrow_mut().remove(&provider_id);
             } else {
                 ic_cdk::trap("Not authorized");
