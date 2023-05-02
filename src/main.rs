@@ -43,10 +43,10 @@ const ALLOWLIST_SERVICE_HOSTS_LIST: &[&str] = &[
     "rpc.ankr.com/eth_goerli",
     "mainnet.infura.io",
     "eth.getblock.io",
+    "rpc.kriptonio.com",
     "api.0x.org",
     "erigon-mainnet--rpc.datahub.figment.io",
     "archivenode.io",
-    "nd-6eaj5va43jggnpxouzp7y47e4y.ethereum.managedblockchain.us-east-1.amazonaws.com",
     "eth-mainnet.nodereal.io",
     "ethereum-mainnet.s.chainbase.online",
     "eth.llamarpc.com",
@@ -407,7 +407,13 @@ fn register_provider(provider: RegisterProvider) {
 #[candid_method]
 fn unregister_provider(provider_id: u64) {
     PROVIDERS.with(|p| {
-        p.borrow_mut().remove(&provider_id);
+        if let Some(provider) = p.borrow().get(&provider_id) {
+            if provider.owner == ic_cdk::caller() || authorized(Auth::Admn) {
+                p.borrow_mut().remove(&provider_id);
+            } else {
+                ic_cdk::trap("Not authorized");
+            }
+        }
     });
 }
 
