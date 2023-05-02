@@ -361,7 +361,7 @@ fn json_rpc_cycles_cost(
 }
 
 #[ic_cdk::query]
-#[candid_method]
+#[candid_method(query)]
 fn get_providers() -> Vec<RegisteredProvider> {
     PROVIDERS.with(|p| {
         p.borrow()
