@@ -16,6 +16,7 @@ use ic_stable_structures::DefaultMemoryImpl;
 use ic_stable_structures::{BoundedStorable, Cell, StableBTreeMap, Storable};
 #[macro_use]
 extern crate num_derive;
+use std::collections::HashMap;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::hash_set::HashSet;
@@ -79,6 +80,7 @@ struct Metrics {
     json_rpc_request_err_no_permission: u64,
     json_rpc_request_err_service_url_host_not_allowed: u64,
     json_rpc_request_err_http_request_error: u64,
+    json_rpc_host_requests: HashMap<String, u64>,
 }
 
 #[derive(Clone, Debug, CandidType, FromPrimitive, Deserialize)]
@@ -224,6 +226,15 @@ macro_rules! inc_metric {
 }
 
 #[macro_export]
+macro_rules! inc_metric_entry {
+    ($metric:ident, $entry:expr) => {{
+        METRICS.with(|m| {
+            m.borrow_mut().$metric.entry($entry.clone()).and_modify(|counter| *counter  += 1).or_insert(1);
+        });
+    }};
+}
+
+#[macro_export]
 macro_rules! add_metric {
     ($metric:ident, $value:expr) => {{
         METRICS.with(|m| m.borrow_mut().$metric += 1);
@@ -313,6 +324,7 @@ async fn json_rpc_request_internal(
         inc_metric!(json_rpc_request_err_service_url_host_not_allowed);
         return Err(EthRpcError::ServiceUrlHostNotAllowed);
     }
+    inc_metric_entry!(json_rpc_host_requests, host);
     let request_headers = vec![
         HttpHeader {
             name: "Content-Type".to_string(),
@@ -574,6 +586,14 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         get_metric!(json_rpc_request_cycles_refunded) as f64,
         "Cycles refunded by json_rpc_request() calls.",
     )?;
+    METRICS.with(|m| {
+        m.borrow().json_rpc_host_requests.iter().map(|(k, v)|
+            w.counter_vec(
+                "json_rpc_host_requests",
+                "Number of json_rpc_request() calls to a service host.",
+            ).and_then(|m| m.value(&[("host", k)], *v as f64)).and(Ok(()))).find(|e| e.is_err()).unwrap_or(Ok(()))
+    })?;
+
     Ok(())
 }
 
