@@ -438,6 +438,8 @@ fn post_upgrade() {
     initialize();
     // Remove these lines when ic_cdk::api::is_controller is supported.
     authorize(ic_cdk::caller(), Auth::Admin);
+    authorize(ic_cdk::caller(), Auth::RegisterProvider);
+    authorize(ic_cdk::caller(), Auth::Rpc);
     stable_authorize(ic_cdk::caller());
 }
 
