@@ -92,7 +92,7 @@ function build_canister() {
     echo "Building $canister"
     echo
 
-    SRC_DIR="$PWD/src/$canister"
+    SRC_DIR="/src/$canister"
     TARGET="wasm32-unknown-unknown"
     # standardize source references
     CARGO_HOME="${CARGO_HOME:-"$HOME/.cargo"}"
@@ -114,7 +114,7 @@ function build_canister() {
     if [ "$ONLY_DEPS" != "1" ]
     then
         ic-wasm \
-            "./target/$TARGET/release/$canister.wasm" \
+            "/cargo_target/$TARGET/release/$canister.wasm" \
             -o "./$canister.wasm" \
             shrink
         ic-wasm "$canister.wasm" -o "$canister.wasm" metadata candid:service -f "$canister.did" -v public
