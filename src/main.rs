@@ -16,10 +16,10 @@ use ic_stable_structures::DefaultMemoryImpl;
 use ic_stable_structures::{BoundedStorable, Cell, StableBTreeMap, Storable};
 #[macro_use]
 extern crate num_derive;
-use std::collections::HashMap;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::hash_set::HashSet;
+use std::collections::HashMap;
 #[cfg(not(target_arch = "wasm32"))]
 use std::fs::File;
 
@@ -229,7 +229,11 @@ macro_rules! inc_metric {
 macro_rules! inc_metric_entry {
     ($metric:ident, $entry:expr) => {{
         METRICS.with(|m| {
-            m.borrow_mut().$metric.entry($entry.clone()).and_modify(|counter| *counter  += 1).or_insert(1);
+            m.borrow_mut()
+                .$metric
+                .entry($entry.clone())
+                .and_modify(|counter| *counter += 1)
+                .or_insert(1);
         });
     }};
 }
@@ -587,11 +591,19 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Cycles refunded by json_rpc_request() calls.",
     )?;
     METRICS.with(|m| {
-        m.borrow().json_rpc_host_requests.iter().map(|(k, v)|
-            w.counter_vec(
-                "json_rpc_host_requests",
-                "Number of json_rpc_request() calls to a service host.",
-            ).and_then(|m| m.value(&[("host", k)], *v as f64)).and(Ok(()))).find(|e| e.is_err()).unwrap_or(Ok(()))
+        m.borrow()
+            .json_rpc_host_requests
+            .iter()
+            .map(|(k, v)| {
+                w.counter_vec(
+                    "json_rpc_host_requests",
+                    "Number of json_rpc_request() calls to a service host.",
+                )
+                .and_then(|m| m.value(&[("host", k)], *v as f64))
+                .and(Ok(()))
+            })
+            .find(|e| e.is_err())
+            .unwrap_or(Ok(()))
     })?;
 
     Ok(())
