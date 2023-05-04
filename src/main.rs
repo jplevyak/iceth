@@ -75,8 +75,8 @@ declare_log_buffer!(name = ERROR, capacity = 1000);
 #[derive(Default)]
 struct Metrics {
     json_rpc_requests: u64,
-    json_rpc_request_cycles_charged: u64,
-    json_rpc_request_cycles_refunded: u64,
+    json_rpc_request_cycles_charged: u128,
+    json_rpc_request_cycles_refunded: u128,
     json_rpc_request_err_no_permission: u64,
     json_rpc_request_err_service_url_host_not_allowed: u64,
     json_rpc_request_err_http_request_error: u64,
@@ -237,7 +237,7 @@ macro_rules! inc_metric_entry {
 #[macro_export]
 macro_rules! add_metric {
     ($metric:ident, $value:expr) => {{
-        METRICS.with(|m| m.borrow_mut().$metric += 1);
+        METRICS.with(|m| m.borrow_mut().$metric += $value);
     }};
 }
 
@@ -313,7 +313,7 @@ async fn json_rpc_request_internal(
     }
     ic_cdk::api::call::msg_cycles_accept128(cost);
     add_metric!(json_rpc_request_cycles_charged, cost);
-    add_metric!(json_rpc_request_cycles_charged, cycles_available - cost);
+    add_metric!(json_rpc_request_cycles_refunded, cycles_available - cost);
     let parsed_url = url::Url::parse(&service_url).or(Err(EthRpcError::ServiceUrlParseError))?;
     let host = parsed_url
         .host_str()
