@@ -1,8 +1,11 @@
 # IC Eth
 ETH for the IC.
 
-## Build
+## API
 
+[API in Candid](./iceth.did)
+
+## Build
 
 ### DFX
 ```bash

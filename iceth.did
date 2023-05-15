@@ -33,4 +33,5 @@ service : {
   get_providers: () -> (vec RegisteredProvider) query;
   register_provider: (RegisterProvider) -> ();
   unregister_provider: (provider_id: nat64) -> ();
+  withdraw_owned_cycles : (target_canister_id: principal) -> ();
 }

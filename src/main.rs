@@ -32,7 +32,7 @@ const HTTP_OUTCALL_BYTE_RECEIEVED_COST: u128 = 100_000u128;
 const STRING_STORABLE_MAX_SIZE: u32 = 100;
 const WASM_PAGE_SIZE: u64 = 65536;
 
-const ALLOWLIST_SERVICE_HOSTS_LIST: &[&str] = &[
+const INITIAL_SERVICE_HOSTS_ALLOWLIST: &[&str] = &[
     "cloudflare-eth.com",
     "ethereum.publicnode.com",
     "eth-mainnet.g.alchemy.com",
@@ -59,7 +59,17 @@ const ALLOWLIST_SERVICE_HOSTS_LIST: &[&str] = &[
     "eth-mainnet.gateway.pokt.network",
 ];
 
-const ALLOWLIST_RPC_LIST: &[&str] = &[];
+// Static permissions. The canister creator is also authorized for all permissions.
+
+// Principals allowed to send JSON RPCs.
+const OPEN_RPC_ACCESS: bool = true;
+const RPC_ALLOWLIST: &[&str] = &[];
+// Principals allowed to registry API keys.
+const REGISTER_PROVIDER_ALLOWLIST: &[&str] = &[];
+// Principals that will not be charged cycles to send JSON RPCs.
+const FREE_RPC_ALLOWLIST: &[&str] = &[];
+// Principals who have Admin authorization.
+const AUTHORIZED_ADMIN: &[&str] = &[];
 
 type AllowlistSet = HashSet<&'static &'static str>;
 
@@ -83,11 +93,12 @@ struct Metrics {
     json_rpc_host_requests: HashMap<String, u64>,
 }
 
-#[derive(Clone, Debug, CandidType, FromPrimitive, Deserialize)]
+#[derive(Clone, Debug, PartialEq, CandidType, FromPrimitive, Deserialize)]
 enum Auth {
     Admin = 1,
     Rpc = 2,
-    RegisterProvider = 4,
+    RegisterProvider = 3,
+    FreeRpc = 4,
 }
 
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
@@ -160,6 +171,7 @@ struct Provider {
     api_key: String,
     cycles_per_call: u64,
     cycles_per_message_byte: u64,
+    cycles_owed: u128,
 }
 
 impl Storable for Metadata {
@@ -186,12 +198,12 @@ impl BoundedStorable for Provider {
 }
 
 thread_local! {
+    // Transient static data: this is reset when the canister is upgraded.
     static METRICS: RefCell<Metrics> = RefCell::new(Metrics::default());
-    static ALLOWLIST_SERVICE_HOSTS: RefCell<AllowlistSet> = RefCell::new(AllowlistSet::new());
-    static ALLOWLIST_REGISTER_API_KEY: RefCell<AllowlistSet> = RefCell::new(AllowlistSet::new());
-    static ALLOWLIST_RPC: RefCell<AllowlistSet> = RefCell::new(AllowlistSet::new());
+    static SERVICE_HOSTS_ALLOWLIST: RefCell<AllowlistSet> = RefCell::new(AllowlistSet::new());
     static AUTH_STABLE: RefCell<HashSet<Principal>> = RefCell::new(HashSet::<Principal>::new());
 
+    // Stable static data: this is preserved when the canister is upgraded.
     #[cfg(not(target_arch = "wasm32"))]
     static MEMORY_MANAGER: RefCell<MemoryManager<FileMemory>> =
         RefCell::new(MemoryManager::init(FileMemory::new(File::open("stable_memory.bin").unwrap())));
@@ -259,7 +271,7 @@ async fn json_rpc_request(
     service_url: String,
     max_response_bytes: u64,
 ) -> Result<Vec<u8>, EthRpcError> {
-    json_rpc_request_internal(json_rpc_payload, service_url, max_response_bytes, 0, 0).await
+    json_rpc_request_internal(json_rpc_payload, service_url, max_response_bytes, None).await
 }
 
 #[ic_cdk_macros::update]
@@ -275,13 +287,12 @@ async fn json_rpc_provider_request(
             .ok_or(EthRpcError::ProviderNotFound)
     });
     let provider = provider?;
-    let service_url = provider.service_url + &provider.api_key;
+    let service_url = provider.service_url.clone() + &provider.api_key;
     json_rpc_request_internal(
         json_rpc_payload,
         service_url,
         max_response_bytes,
-        provider.cycles_per_call,
-        provider.cycles_per_message_byte,
+        Some(provider),
     )
     .await
 }
@@ -290,43 +301,53 @@ async fn json_rpc_request_internal(
     json_rpc_payload: String,
     service_url: String,
     max_response_bytes: u64,
-    provider_cycles_per_call: u64,
-    provider_cycles_per_message_byte: u64,
+    provider: Option<Provider>,
 ) -> Result<Vec<u8>, EthRpcError> {
     inc_metric!(json_rpc_requests);
-    let caller = ic_cdk::caller().to_string();
-    if ALLOWLIST_RPC.with(|a| !a.borrow().is_empty() && !a.borrow().contains(&caller.as_str()))
-        || authorized(Auth::Rpc)
-    {
+    if !authorized(Auth::Rpc) {
         inc_metric!(json_rpc_request_err_no_permission);
         return Err(EthRpcError::NoPermission);
     }
     let cycles_available = ic_cdk::api::call::msg_cycles_available128();
-    let cost = json_rpc_cycles_cost(
-        &json_rpc_payload,
-        &service_url,
-        max_response_bytes,
-        provider_cycles_per_call,
-        provider_cycles_per_message_byte,
-    );
-    if cycles_available < cost {
-        return Err(EthRpcError::TooFewCycles(format!(
-            "requires {} cycles, got {} cycles",
-            cost, cycles_available
-        )));
-    }
-    ic_cdk::api::call::msg_cycles_accept128(cost);
-    add_metric!(json_rpc_request_cycles_charged, cost);
-    add_metric!(json_rpc_request_cycles_refunded, cycles_available - cost);
     let parsed_url = url::Url::parse(&service_url).or(Err(EthRpcError::ServiceUrlParseError))?;
     let host = parsed_url
         .host_str()
         .ok_or(EthRpcError::ServiceUrlHostMissing)?
         .to_string();
-    if ALLOWLIST_SERVICE_HOSTS.with(|a| !a.borrow().contains(&host.as_str())) {
+    if SERVICE_HOSTS_ALLOWLIST.with(|a| !a.borrow().contains(&host.as_str())) {
         log!(INFO, "host not allowed {}", host);
         inc_metric!(json_rpc_request_err_service_url_host_not_allowed);
         return Err(EthRpcError::ServiceUrlHostNotAllowed);
+    }
+    if !authorized(Auth::FreeRpc) {
+        let provider_cost = match &provider {
+            None => 0,
+            Some(provider) => json_rpc_provider_cycles_cost(
+                &json_rpc_payload,
+                provider.cycles_per_call,
+                provider.cycles_per_message_byte,
+            ),
+        };
+        let cost = json_rpc_cycles_cost(&json_rpc_payload, &service_url, max_response_bytes)
+            + provider_cost;
+        if cycles_available < cost {
+            return Err(EthRpcError::TooFewCycles(format!(
+                "requires {} cycles, got {} cycles",
+                cost, cycles_available
+            )));
+        }
+        ic_cdk::api::call::msg_cycles_accept128(cost);
+        if let Some(mut provider) = provider {
+            provider.cycles_owed += provider_cost;
+            PROVIDERS.with(|p| {
+                // Error should not happen here as it was checked before.
+                p.borrow_mut()
+                    .insert(provider.provider_id, provider)
+                    .expect("unable to update Provider");
+            });
+        }
+        add_metric!(json_rpc_request_cycles_charged, cost);
+        add_metric!(json_rpc_request_cycles_refunded, cycles_available - cost);
     }
     inc_metric_entry!(json_rpc_host_requests, host);
     let request_headers = vec![
@@ -363,17 +384,23 @@ fn json_rpc_cycles_cost(
     json_rpc_payload: &str,
     service_url: &str,
     max_response_bytes: u64,
-    provider_cycles_per_call: u64,
-    provider_cycles_per_message_byte: u64,
 ) -> u128 {
     let ingress_bytes =
         (json_rpc_payload.len() + service_url.len()) as u128 + INGRESS_OVERHEAD_BYTES;
     INGRESS_MESSAGE_RECEIVED_COST
-        + provider_cycles_per_call as u128
         + INGRESS_MESSAGE_BYTE_RECEIVED_COST * ingress_bytes
-        + provider_cycles_per_message_byte as u128 * ingress_bytes
         + HTTP_OUTCALL_REQUEST_COST
         + HTTP_OUTCALL_BYTE_RECEIEVED_COST * (ingress_bytes + max_response_bytes as u128)
+}
+
+fn json_rpc_provider_cycles_cost(
+    json_rpc_payload: &str,
+    provider_cycles_per_call: u64,
+    provider_cycles_per_message_byte: u64,
+) -> u128 {
+    provider_cycles_per_call as u128
+        + provider_cycles_per_message_byte as u128
+        + json_rpc_payload.len() as u128
 }
 
 #[ic_cdk::query]
@@ -414,6 +441,7 @@ fn register_provider(provider: RegisterProvider) {
                 api_key: provider.api_key,
                 cycles_per_call: provider.cycles_per_call,
                 cycles_per_message_byte: provider.cycles_per_message_byte,
+                cycles_owed: 0,
             },
         )
     });
@@ -431,6 +459,21 @@ fn unregister_provider(provider_id: u64) {
             }
         }
     });
+}
+
+#[derive(CandidType)]
+struct DepositCyclesArgs {
+    canister_id: Principal,
+}
+
+#[ic_cdk::update(guard = "is_authorized_register_provider")]
+#[candid_method]
+async fn withdraw_owned_cycles(canister_id: Principal) {
+    let args = DepositCyclesArgs { canister_id };
+    match ic_cdk::call(Principal::management_canister(), "deposit_cycles", (args,)).await {
+        Ok(()) => (),
+        Err(e) => ic_cdk::trap(&format!("failed to deposit_cycles: {:?}", e)),
+    };
 }
 
 #[ic_cdk_macros::query(name = "transform")]
@@ -456,13 +499,36 @@ fn post_upgrade() {
     authorize(ic_cdk::caller(), Auth::Admin);
     authorize(ic_cdk::caller(), Auth::RegisterProvider);
     authorize(ic_cdk::caller(), Auth::Rpc);
+    authorize(ic_cdk::caller(), Auth::FreeRpc);
     stable_authorize(ic_cdk::caller());
 }
 
 fn initialize() {
-    ALLOWLIST_SERVICE_HOSTS
-        .with(|a| (*a.borrow_mut()) = AllowlistSet::from_iter(ALLOWLIST_SERVICE_HOSTS_LIST));
-    ALLOWLIST_RPC.with(|a| (*a.borrow_mut()) = AllowlistSet::from_iter(ALLOWLIST_RPC_LIST));
+    SERVICE_HOSTS_ALLOWLIST
+        .with(|a| (*a.borrow_mut()) = AllowlistSet::from_iter(INITIAL_SERVICE_HOSTS_ALLOWLIST));
+
+    for principal in RPC_ALLOWLIST.iter() {
+        authorize(to_principal(principal), Auth::Rpc);
+    }
+    for principal in REGISTER_PROVIDER_ALLOWLIST.iter() {
+        authorize(to_principal(principal), Auth::RegisterProvider);
+    }
+    for principal in FREE_RPC_ALLOWLIST.iter() {
+        authorize(to_principal(principal), Auth::FreeRpc);
+    }
+    for principal in AUTHORIZED_ADMIN.iter() {
+        authorize(to_principal(principal), Auth::Admin);
+    }
+}
+
+fn to_principal(principal: &str) -> Principal {
+    match Principal::from_text(principal) {
+        Ok(p) => p,
+        Err(e) => ic_cdk::trap(&format!(
+            "failed to convert Principal {} {:?}",
+            principal, e
+        )),
+    }
 }
 
 #[ic_cdk::query]
@@ -553,6 +619,9 @@ fn is_authorized_register_provider() -> Result<(), String> {
 }
 
 fn authorized(auth: Auth) -> bool {
+    if auth == Auth::Rpc && OPEN_RPC_ACCESS {
+        return true;
+    }
     let caller = PrincipalStorable(ic_cdk::caller());
     AUTH.with(|a| {
         if let Some(v) = a.borrow().get(&caller) {
@@ -639,8 +708,6 @@ fn check_json_rpc_cycles_cost() {
         "{\"jsonrpc\":\"2.0\",\"method\":\"eth_gasPrice\",\"params\":[],\"id\":1}",
         "https://cloudflare-eth.com",
         1000,
-        0,
-        0,
     );
     let s10 = "0123456789";
     let base_cost_s10 = json_rpc_cycles_cost(
@@ -648,8 +715,6 @@ fn check_json_rpc_cycles_cost() {
             + s10),
         "https://cloudflare-eth.com",
         1000,
-        0,
-        0,
     );
     assert_eq!(
         base_cost + 10 * (INGRESS_MESSAGE_BYTE_RECEIVED_COST + HTTP_OUTCALL_BYTE_RECEIEVED_COST),
