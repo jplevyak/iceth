@@ -2,7 +2,7 @@
 
 ## Overview
 
-*Service, JSON API service:* A Web2 service such as [Infura](https://www.infura.io/), [Gateway.fm](https://gateway.fm/), or [CloudFlare](https://www.cloudflare.com/en-gb/web3/) that offers access to the Ethereum JSON RPC API through HTTP. Note that also other EVM-compatible chains may be covered by such JSON RPC API.
+*Service, JSON API service:* A Web2 service such as [Infura](https://www.infura.io/), [Gateway.fm](https://gateway.fm/), or [CloudFlare](https://www.cloudflare.com/en-gb/web3/) that offers access to the Ethereum JSON RPC API through HTTP. Note that also other EVM-compatible chains may be covered by such a JSON RPC API.
 
 *Provider:* A provider is registered in the canister and allows for connecting to a specific JSON API service in the Web2 world. Each chain id for a particular service requires a different provider and typically requires a different API key. Multiple providers can be registered for a service / chain id combination.
 
