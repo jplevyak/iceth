@@ -29,7 +29,7 @@ Register a new *provider* for a Web2-based *service*.
 The `RegisterProvider` record defines the details about the service to register, including the API key for the service.
 * `chain_id`: The id of the Ethereum chain this provider allows to connect to. The ids refer to the chain ids as defined for EVM-compatible blockchains, see, e.g., [ChainList](https://chainlist.org/?testnets=true).
 * `service_url`: The URLs of the Web2 service provider that is used by the canister when using this provider.
-* `api_key`: The API key for authorizing requests to this service provider.
+* `api_key`: The API key for authorizing requests to this service provider. The API key is private to the entity registering it and the canister. It is not exposed in the response of the `get_providers` method. The URL used to access the service is constructed by concatenating the `service_url` and the `api_key` (without a seperator), e.g., "https://cloudflare-eth.com" and "/my-api-key").
 * `cycles_per_call`: Cycles charged per call by the canister in addition to the base charges when using this provider.
 * `cycles_per_message_byte`: Cycles charged per payload byte by the canister in addition to the base charges when using this provider.
 
@@ -68,7 +68,7 @@ Make a request to a Web2 Ethereum node using the caller's URL to an openly avail
     json_rpc_request: (json_rpc_payload: text, service_url: text, max_response_bytes: nat64) -> (EthRpcResult);
 
 * `json_rpc_payload`: The payload for the JSON RPC request, in compliance with the [JSON RPC specification](https://www.jsonrpc.org/specification).
-* `service_url`: The URL of the service, comprising an API key for access-protected services.
+* `service_url`: The URL of the service, including any API key if required for access-protected services.
 * `max_response_bytes`: The expected maximum size of the response of the Web2 API server. This parameter determines the network response size that is charged for. Not specifying it or it being larger than required may lead to substantial extra cycles cost for the HTTPS outcalls mechanism as its (large) default value is used and charged for.
 * `EthRpcResult`: The response comprises the JSON-encoded result or error, see the corresponding type.
 
