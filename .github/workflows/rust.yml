@@ -19,14 +19,14 @@ jobs:
       - name: Cargo fmt
         run: |
           rustup component add rustfmt
-          cargo fmt
-      - name: Commit Formatting changes
-        uses: EndBug/add-and-commit@v9
-        if: ${{ github.ref != 'refs/heads/main' }}
-        with:
-          add: src
-          default_author: github_actions
-          message: "🤖 cargo-fmt auto-update"
+          cargo fmt -- --check
+      # - name: Commit Formatting changes
+      #   uses: EndBug/add-and-commit@v9
+      #   if: ${{ github.ref != 'refs/heads/main' }}
+      #   with:
+      #     add: src
+      #     default_author: github_actions
+      #     message: "🤖 cargo-fmt auto-update"
 
   cargo-clippy:
     runs-on: ubuntu-latest
@@ -36,6 +36,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
+          shared-key: ${{ github.repository }}-checks
           cache-targets:  false
           save-if: ${{ github.ref_type != 'tag' }}
 
@@ -72,6 +73,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
+          shared-key: ${{ github.repository }}-checks
           cache-targets:  false
           save-if: ${{ github.ref_type != 'tag' }}
 
@@ -88,6 +90,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
+          shared-key: ${{ github.repository }}-checks
           cache-targets:  false
           save-if: ${{ github.ref_type != 'tag' }}
 
@@ -98,6 +101,7 @@ jobs:
           args: --all-targets
 
   cargo-build:
+    if: ${{ github.ref_type != 'tag' }}
     runs-on: ubuntu-latest
     needs: cargo-check
     steps:
@@ -106,6 +110,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
+          shared-key: ${{ github.repository }}-builds
           cache-targets:  false
           save-if: ${{ github.ref_type != 'tag' }}
 
@@ -116,6 +121,7 @@ jobs:
           args: --tests --release
 
   cargo-wasm-build:
+    if: ${{ github.ref_type != 'tag' }}
     runs-on: ubuntu-latest
     needs: cargo-check
     steps:
@@ -124,6 +130,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
+          shared-key: ${{ github.repository }}-builds
           cache-targets:  false
           save-if: ${{ github.ref_type != 'tag' }}
 
@@ -132,3 +139,34 @@ jobs:
         with:
           command: build
           args: --tests --release --target wasm32-unknown-unknown
+
+  forked-release:
+    if: ${{ github.ref_type == 'tag' }}
+    runs-on: ubuntu-latest
+    needs: [cargo-check, cargo-fmt, cargo-clippy, cargo-deny, cargo-audit]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ github.repository }}-builds
+          cache-targets:  false
+
+      - run: cargo install --locked ic-wasm
+
+      - name: "Prepare release build"
+        run: |
+          mkdir -p .release
+          cargo run -p iceth --release > .release/iceth.did
+          cargo build -p iceth --target wasm32-unknown-unknown --release
+          ic-wasm target/wasm32-unknown-unknown/release/iceth.wasm -o .release/iceth.wasm shrink
+
+          cd .release
+          tar -czf ../iceth-${{ github.ref_name }}.tar.gz --owner=0 --group=0 --no-same-owner --no-same-permissions .
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ./*.tar.gz
