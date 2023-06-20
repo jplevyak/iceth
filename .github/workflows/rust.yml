@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - btf_main
     tags:
       - v*
     paths-ignore:
@@ -32,6 +33,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@master
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets:  false
+          save-if: ${{ github.ref_type != 'tag' }}
+
       - run: rustup component add clippy
       - name: Cargo clippy
         # We run clippy twice (once without tests), so that it accurately reports dead code in the non-test configuration.
@@ -46,6 +53,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@master
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets:  false
+          save-if: ${{ github.ref_type != 'tag' }}
+
       - run: cargo install --locked cargo-deny
       - name: Cargo deny
         run: |
@@ -56,6 +69,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@master
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets:  false
+          save-if: ${{ github.ref_type != 'tag' }}
+
       - run: cargo install --locked cargo-audit
       - name: Cargo audit
         run: |
@@ -66,6 +85,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@master
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets:  false
+          save-if: ${{ github.ref_type != 'tag' }}
 
       - name: Cargo build
         uses: actions-rs/cargo@master
@@ -80,6 +104,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@master
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets:  false
+          save-if: ${{ github.ref_type != 'tag' }}
+
       - name: Cargo build
         uses: actions-rs/cargo@master
         with:
@@ -92,6 +121,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@master
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets:  false
+          save-if: ${{ github.ref_type != 'tag' }}
 
       - name: Cargo build
         uses: actions-rs/cargo@master
