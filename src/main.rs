@@ -498,7 +498,8 @@ async fn withdraw_owed_cycles(provider_id: u64, canister_id: Principal) {
     }
     PROVIDERS.with(|p| {
         provider.cycles_owed = 0;
-        p.borrow_mut().insert(provider_id, provider)});
+        p.borrow_mut().insert(provider_id, provider)
+    });
     match ic_cdk::api::call::call_with_payment128(
         Principal::management_canister(),
         "deposit_cycles",
