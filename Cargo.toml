@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 candid = "0.8"
-ic-canister-log = "0.1.0"
+ic-canister-log = "0.2.0"
 ic-canister-serve = "0.1.0"
 ic-certified-map = "0.3"
 ic-cdk = "0.7"
