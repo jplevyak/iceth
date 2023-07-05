@@ -358,13 +358,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc30fcca108209c073e0a08b5cdf50b10a91125a9814f2cd3c65da58cb87a1ee"
 
 [[package]]
+name = "ic-canister-log"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb82c4f617ecff6e452fe65af0489626ec7330ffe3eedd9ea14e6178eea48d1a"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "ic-canister-serve"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74e080508c567329c309251484328d51c34eb615d876bbaa3b26ca20637f1fbd"
 dependencies = [
  "by_address",
- "ic-canister-log",
+ "ic-canister-log 0.1.0",
  "ic-cdk",
  "ic-metrics-encoder",
  "maplit",
@@ -434,7 +443,7 @@ name = "iceth"
 version = "0.1.0"
 dependencies = [
  "candid",
- "ic-canister-log",
+ "ic-canister-log 0.2.0",
  "ic-canister-serve",
  "ic-cdk",
  "ic-cdk-macros",
